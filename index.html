@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ứng Dụng Chấm Công</title>
+    <title>Ứng Dụng Chấm Công (Phân Quyền)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -14,13 +14,14 @@
         }
         .table-container { width: 100%; overflow-x: auto; }
         table { border-collapse: separate; border-spacing: 0; }
-        th, td { border: 1px solid #e2e8f0; white-space: nowrap; text-align: center; }
+        th, td { border: 1px solid #e2e8f0; white-space: nowrap; text-align: center; padding: 0.5rem; }
         th:first-child, td:first-child,
         th:nth-child(2), td:nth-child(2) { position: sticky; left: 0; z-index: 10; background-color: white; }
         th:first-child, td:first-child { width: 200px; min-width: 200px; }
         th:nth-child(2), td:nth-child(2) { left: 200px; width: 150px; min-width: 150px; }
         .weekend { background-color: #f7fafc; }
         .status-popover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        .status-popover button { padding: 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600; }
         .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); }
         td.pending-request::after {
             content: ''; position: absolute; top: 2px; right: 2px;
@@ -116,11 +117,10 @@
         const popover = document.getElementById('status-popover');
         let currentCell = { employeeId: null, day: null };
 
-        // --- STATUS CONFIG ---
         const STATUS_MAP = { "X": { text: "X", class: "bg-green-100 text-green-800" }, "X/2": { text: "X/2", class: "bg-teal-100 text-teal-800" }, "P": { text: "P", class: "bg-blue-100 text-blue-800" }, "VR": { text: "VR", class: "bg-indigo-100 text-indigo-800" }, "L": { text: "L", class: "bg-purple-100 text-purple-800" }, "Ô": { text: "Ô", class: "bg-amber-100 text-amber-800" }, "Ts": { text: "Ts", class: "bg-pink-100 text-pink-800" }, "Nb": { text: "Nb", class: "bg-cyan-100 text-cyan-800" }, "No": { text: "No", class: "bg-orange-100 text-orange-800" }, "H": { text: "H", class: "bg-gray-200 text-gray-700" }, "Cđ": { text: "Cđ", class: "bg-lime-100 text-lime-800" }, };
         const STATUS_COUNT = { workDays: { label: 'Công', statuses: {'X': 1, 'X/2': 0.5, 'H': 1, 'Cđ': 1} }, paidLeave: { label: 'Nghỉ P', statuses: {'P': 1} }, unpaidLeave: { label: 'Nghỉ KL', statuses: {'No': 1, 'VR': 1} }, insuranceLeave: { label: 'Nghỉ BHXH', statuses: {'Ô': 1, 'Ts': 1} }, holiday: { label: 'Lễ', statuses: {'L': 1} }, compensatedLeave: { label: 'Nghỉ Bù', statuses: {'Nb': 1} }, };
 
-        // --- DATA HANDLING with localStorage ---
+        // --- DATA HANDLING ---
         const getStorageKey = (type, date) => `${type}-${date.getFullYear()}-${date.getMonth()}`;
         const saveData = (type, data) => localStorage.setItem(getStorageKey(type, currentDate), JSON.stringify(data));
         const loadData = (type) => JSON.parse(localStorage.getItem(getStorageKey(type, currentDate)) || 'null');
@@ -171,7 +171,7 @@
         function handleAdminLogin(email, password) {
             if (email === ADMIN_INFO.email && password === ADMIN_INFO.password) {
                 setCurrentUser(ADMIN_INFO.id);
-                document.getElementById('admin-login-modal').classList.add('hidden');
+                closeModal('admin-login-modal');
             } else {
                 alert('Email hoặc mật khẩu không đúng.');
             }
@@ -179,12 +179,40 @@
 
         // --- RENDERING ---
         function render() {
-            renderHeader(); renderBody(); updateUIForRole();
+            renderHeader(); 
+            renderBody(); 
+            updateUIForRole();
         }
-        function renderHeader() { /* ... same as before ... */ }
+
+        function renderHeader() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const head = document.getElementById('timesheet-head');
+            let headerHTML = `<tr><th class="p-2 w-48 text-left">Họ và Tên</th><th class="p-2 w-36 text-left">Chức vụ</th>`;
+            for (let day = 1; day <= daysInMonth; day++) {
+                headerHTML += `<th class="p-2 text-center w-12">${day}</th>`;
+            }
+            Object.values(STATUS_COUNT).forEach(status => headerHTML += `<th class="p-2 w-20">${status.label}</th>`);
+            headerHTML += `</tr><tr><th></th><th></th>`;
+            const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayOfWeek = new Date(year, month, day).getDay();
+                headerHTML += `<th class="p-2 text-xs font-normal ${dayOfWeek % 6 === 0 ? 'weekend' : ''}">${weekdays[dayOfWeek]}</th>`;
+            }
+            Object.values(STATUS_COUNT).forEach(() => headerHTML += `<th></th>`);
+            headerHTML += `</tr>`;
+            head.innerHTML = headerHTML;
+            document.getElementById('current-month-display').innerText = `Tháng ${month + 1}, ${year}`;
+        }
+        
         function renderBody() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
             const body = document.getElementById('timesheet-body');
             let bodyHTML = '';
+
             const pendingRequestsMap = new Map();
             requests.filter(r => r.status === 'pending' && r.type === 'edit').forEach(r => {
                 const key = `${r.employeeId}-${new Date(r.date).getDate()}`;
@@ -192,23 +220,209 @@
             });
 
             employees.forEach(emp => {
-                // ... logic to build row, summaries ...
                 const empAttendance = attendanceData[emp.id] || {};
+                const summaries = Object.keys(STATUS_COUNT).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const status = empAttendance[day];
+                    if (status) {
+                        for (const [summaryKey, config] of Object.entries(STATUS_COUNT)) {
+                            if (config.statuses[status]) summaries[summaryKey] += config.statuses[status];
+                        }
+                    }
+                }
+                
                 let rowHTML = `<td class="p-2 text-left font-medium">${emp.name}</td><td class="p-2 text-left text-gray-600">${emp.position}</td>`;
-                for (let day = 1; day <= new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate(); day++) {
-                    const hasPending = pendingRequestsMap.has(`${emp.id}-${day}`);
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const isWeekend = new Date(year, month, day).getDay() % 6 === 0;
                     const status = empAttendance[day] || '';
                     const statusInfo = STATUS_MAP[status] || {};
-                    rowHTML += `<td data-employee-id="${emp.id}" data-day="${day}" class="p-2 cursor-pointer hover:bg-yellow-100 transition-colors ${hasPending ? 'pending-request' : ''} ${statusInfo.class || ''}">${statusInfo.text || ''}</td>`;
+                    const hasPending = pendingRequestsMap.has(`${emp.id}-${day}`);
+                    rowHTML += `<td data-employee-id="${emp.id}" data-day="${day}" class="p-2 cursor-pointer hover:bg-yellow-100 transition-colors ${isWeekend ? 'weekend' : ''} ${statusInfo.class || ''} ${hasPending ? 'pending-request' : ''}">${statusInfo.text || ''}</td>`;
                 }
-                // ... add summaries to rowHTML ...
+                Object.values(summaries).forEach(val => { rowHTML += `<td class="p-2 font-bold">${val || 0}</td>`; });
                 bodyHTML += `<tr>${rowHTML}</tr>`;
             });
             body.innerHTML = bodyHTML;
         }
+        
+        // --- MODALS ---
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if(modal) modal.classList.add('hidden');
+        }
 
-        // --- MODAL & POPOVER LOGIC ---
-        // ... (functions to open/close modals and popover, handle form submissions)
+        function openAdminLoginModal() {
+            const modal = document.getElementById('admin-login-modal');
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+                    <h3 class="text-xl font-semibold mb-4">Đăng Nhập Admin</h3>
+                    <form id="admin-login-form">
+                        <div class="mb-4">
+                            <label for="admin-email" class="block text-sm font-medium text-gray-700">Email</label>
+                            <input type="email" id="admin-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="mb-6">
+                            <label for="admin-password" class="block text-sm font-medium text-gray-700">Mật khẩu</label>
+                            <input type="password" id="admin-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 cancel-btn">Hủy</button>
+                            <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">Đăng Nhập</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            modal.classList.remove('hidden');
+            modal.querySelector('.cancel-btn').addEventListener('click', () => closeModal('admin-login-modal'));
+            modal.querySelector('#admin-login-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                handleAdminLogin(document.getElementById('admin-email').value, document.getElementById('admin-password').value);
+            });
+        }
+        
+        function openUserRequestModal(type, day = null) {
+            const modal = document.getElementById('user-request-modal');
+            const date = new Date(currentDate);
+            if(day) date.setDate(day);
+            const dateString = date.toLocaleDateString('vi-VN');
+            let title = '';
+            let formContent = `
+                <input type="hidden" id="request-type" value="${type}">
+                <input type="hidden" id="request-date" value="${date.toISOString()}">
+                <div class="mb-4"><span class="font-semibold">Ngày:</span> ${dateString}</div>`;
+
+            switch(type) {
+                case 'edit':
+                    title = 'Đề xuất Chỉnh sửa Chấm công';
+                    formContent += `
+                        <div class="mb-4">
+                            <label for="request-status" class="block text-sm font-medium text-gray-700">Trạng thái đúng:</label>
+                            <select id="request-status" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md">${Object.keys(STATUS_MAP).map(s => `<option value="${s}">${s}</option>`).join('')}</select>
+                        </div>
+                        <div class="mb-4">
+                            <label for="request-reason" class="block text-sm font-medium text-gray-700">Lý do:</label>
+                            <textarea id="request-reason" required rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
+                        </div>`;
+                    break;
+                case 'leave':
+                    title = 'Đơn Xin Nghỉ';
+                     formContent += `<div class="mb-4">
+                        <label for="request-reason" class="block text-sm font-medium text-gray-700">Lý do nghỉ:</label>
+                        <textarea id="request-reason" required rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
+                    </div>`;
+                    break;
+                case 'late':
+                     title = 'Báo Đi Trễ';
+                     formContent += `
+                        <div class="mb-4">
+                            <label for="request-time" class="block text-sm font-medium text-gray-700">Thời gian dự kiến đến:</label>
+                            <input type="time" id="request-time" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                        </div>
+                         <div class="mb-4">
+                            <label for="request-reason" class="block text-sm font-medium text-gray-700">Lý do đi trễ:</label>
+                            <textarea id="request-reason" required rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
+                        </div>`;
+                    break;
+            }
+
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+                    <h3 class="text-xl font-semibold mb-4">${title}</h3>
+                    <form id="user-request-form">${formContent}
+                        <div class="flex justify-end space-x-3 mt-6">
+                            <button type="button" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 cancel-btn">Hủy</button>
+                            <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">Gửi Yêu Cầu</button>
+                        </div>
+                    </form>
+                </div>`;
+            modal.classList.remove('hidden');
+            modal.querySelector('.cancel-btn').addEventListener('click', () => closeModal('user-request-modal'));
+            modal.querySelector('#user-request-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newRequest = {
+                    id: `req_${Date.now()}`, employeeId: currentUserInfo.id, employeeName: currentUserInfo.name, status: 'pending',
+                    type: document.getElementById('request-type').value, date: document.getElementById('request-date').value,
+                    reason: document.getElementById('request-reason').value, details: {}
+                };
+                if(newRequest.type === 'edit') newRequest.details.newStatus = document.getElementById('request-status').value;
+                if(newRequest.type === 'late') newRequest.details.lateTime = document.getElementById('request-time').value;
+
+                requests.push(newRequest);
+                saveData('requests', requests);
+                render();
+                closeModal('user-request-modal');
+                alert('Đã gửi yêu cầu thành công!');
+            });
+        }
+        
+        function openAdminRequestsModal() {
+            const modal = document.getElementById('admin-requests-modal');
+            const pendingRequests = requests.filter(r => r.status === 'pending');
+            let content = `<h3 class="text-xl font-semibold mb-4">Danh sách Yêu cầu Chờ Duyệt</h3>`;
+            if (pendingRequests.length === 0) {
+                content += `<p class="text-gray-600">Không có yêu cầu nào đang chờ.</p>`;
+            } else {
+                content += `<div class="space-y-4 max-h-96 overflow-y-auto">`;
+                pendingRequests.forEach(req => {
+                    const reqDate = new Date(req.date);
+                    let details = `Lý do: ${req.reason}`;
+                    if(req.type === 'edit') details += `<br><b>Sửa thành:</b> ${req.details.newStatus}`;
+                    if(req.type === 'late') details += `<br><b>Giờ đến:</b> ${req.details.lateTime}`;
+
+                    content += `
+                        <div class="border rounded-lg p-3">
+                            <p><b>Người gửi:</b> ${req.employeeName}</p>
+                            <p><b>Loại:</b> ${req.type === 'edit' ? 'Sửa công' : (req.type === 'leave' ? 'Xin nghỉ' : 'Báo trễ')}</p>
+                            <p><b>Ngày:</b> ${reqDate.toLocaleDateString('vi-VN')}</p>
+                            <p class="text-sm text-gray-700 mt-1">${details}</p>
+                            <div class="flex justify-end space-x-2 mt-2">
+                                <button data-req-id="${req.id}" data-action="reject" class="action-btn bg-red-500 text-white px-3 py-1 text-sm rounded hover:bg-red-600">Từ chối</button>
+                                <button data-req-id="${req.id}" data-action="approve" class="action-btn bg-green-500 text-white px-3 py-1 text-sm rounded hover:bg-green-600">Đồng ý</button>
+                            </div>
+                        </div>`;
+                });
+                content += `</div>`;
+            }
+            
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl">
+                    ${content}
+                    <div class="flex justify-end mt-6">
+                        <button type="button" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 cancel-btn">Đóng</button>
+                    </div>
+                </div>
+            `;
+            modal.classList.remove('hidden');
+            modal.querySelector('.cancel-btn').addEventListener('click', () => closeModal('admin-requests-modal'));
+            modal.querySelectorAll('.action-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const reqId = e.target.dataset.reqId;
+                    const action = e.target.dataset.action;
+                    handleRequestAction(reqId, action);
+                });
+            });
+        }
+        
+        function handleRequestAction(reqId, action) {
+            const requestIndex = requests.findIndex(r => r.id === reqId);
+            if (requestIndex === -1) return;
+            
+            const req = requests[requestIndex];
+            requests[requestIndex].status = action === 'approve' ? 'approved' : 'rejected';
+
+            if (action === 'approve' && req.type === 'edit') {
+                const reqDate = new Date(req.date);
+                const day = reqDate.getDate();
+                if(!attendanceData[req.employeeId]) attendanceData[req.employeeId] = {};
+                attendanceData[req.employeeId][day] = req.details.newStatus;
+                saveData('attendanceData', attendanceData);
+            }
+            
+            saveData('requests', requests);
+            render();
+            closeModal('admin-requests-modal');
+            openAdminRequestsModal(); // Refresh modal content
+        }
 
         // --- ACTION HANDLERS ---
         function handleMonthChange(offset) {
@@ -217,6 +431,44 @@
             render();
         }
         
+        function exportToCSV() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // UTF-8 BOM
+
+            let header1 = ["STT", "Họ và Tên", "Chức vụ"];
+            for (let day = 1; day <= daysInMonth; day++) header1.push(day);
+            Object.values(STATUS_COUNT).forEach(status => header1.push(status.label));
+            csvContent += header1.join(',') + '\r\n';
+
+            employees.forEach((emp, index) => {
+                let row = [index + 1, `"${emp.name}"`, `"${emp.position}"`];
+                const empAttendance = attendanceData[emp.id] || {};
+                const summaries = Object.keys(STATUS_COUNT).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
+
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const status = empAttendance[day] || '';
+                    row.push(status);
+                    if (status) {
+                        for (const [summaryKey, config] of Object.entries(STATUS_COUNT)) {
+                            if (config.statuses[status]) summaries[summaryKey] += config.statuses[status];
+                        }
+                    }
+                }
+                Object.values(summaries).forEach(val => row.push(val || 0));
+                csvContent += row.join(',') + '\r\n';
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `Bang_Cham_Cong_Thang_${month + 1}_${year}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
         // --- EVENT LISTENERS ---
         document.addEventListener('DOMContentLoaded', () => {
             loadInitialData();
@@ -224,272 +476,74 @@
             setCurrentUser(document.getElementById('user-select').value);
             loadAllDataForMonth();
             render();
-            // ... (attach all other event listeners)
-        });
-
-        // Placeholder for the rest of the JS logic
-        // This includes all event listeners and modal generation functions
-        // which are extensive. The structure above provides the foundation.
-
-    </script>
-    <script>
-    // --- Full JS Logic ---
-    // (This script tag is separated for clarity, in the final file it's all one block)
-    document.addEventListener('DOMContentLoaded', () => {
-    
-    // Re-assigning variables from the first script block to this scope
-    const getStorageKey = (type, date) => `${type}-${date.getFullYear()}-${date.getMonth()}`;
-    const saveData = (type, data) => localStorage.setItem(getStorageKey(type, currentDate), JSON.stringify(data));
-    const loadData = (type) => JSON.parse(localStorage.getItem(getStorageKey(type, currentDate)) || 'null');
-
-    // --- MODAL & POPOVER LOGIC ---
-    function closeModal(modalId) { document.getElementById(modalId).classList.add('hidden'); }
-
-    function openAdminLoginModal() {
-        const modal = document.getElementById('admin-login-modal');
-        modal.innerHTML = `
-            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-                <h3 class="text-xl font-semibold mb-4">Đăng Nhập Admin</h3>
-                <form id="admin-login-form">
-                    <div class="mb-4">
-                        <label for="admin-email" class="block text-sm font-medium text-gray-700">Email</label>
-                        <input type="email" id="admin-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div class="mb-6">
-                        <label for="admin-password" class="block text-sm font-medium text-gray-700">Mật khẩu</label>
-                        <input type="password" id="admin-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div class="flex justify-end space-x-3">
-                        <button type="button" onclick="closeModal('admin-login-modal')" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Hủy</button>
-                        <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">Đăng Nhập</button>
-                    </div>
-                </form>
-            </div>
-        `;
-        modal.classList.remove('hidden');
-        document.getElementById('admin-login-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            handleAdminLogin(document.getElementById('admin-email').value, document.getElementById('admin-password').value);
-        });
-    }
-
-    function openUserRequestModal(type, day = null) {
-        const modal = document.getElementById('user-request-modal');
-        const date = new Date(currentDate);
-        if(day) date.setDate(day);
-        const dateString = date.toLocaleDateString('vi-VN');
-        let title = '';
-        let formContent = `
-            <input type="hidden" id="request-type" value="${type}">
-            <input type="hidden" id="request-date" value="${date.toISOString()}">
-            <div class="mb-4"><span class="font-semibold">Ngày:</span> ${dateString}</div>
-        `;
-
-        switch(type) {
-            case 'edit':
-                title = 'Đề xuất Chỉnh sửa Chấm công';
-                formContent += `
-                    <div class="mb-4">
-                        <label for="request-status" class="block text-sm font-medium text-gray-700">Trạng thái đúng:</label>
-                        <select id="request-status" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md">${Object.keys(STATUS_MAP).map(s => `<option value="${s}">${s}</option>`).join('')}</select>
-                    </div>
-                    <div class="mb-4">
-                        <label for="request-reason" class="block text-sm font-medium text-gray-700">Lý do:</label>
-                        <textarea id="request-reason" required rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
-                    </div>`;
-                break;
-            case 'leave':
-                title = 'Đơn Xin Nghỉ';
-                 formContent += `
-                    <div class="mb-4">
-                        <label for="request-reason" class="block text-sm font-medium text-gray-700">Lý do nghỉ:</label>
-                        <textarea id="request-reason" required rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
-                    </div>`;
-                break;
-            case 'late':
-                 title = 'Báo Đi Trễ';
-                 formContent += `
-                    <div class="mb-4">
-                        <label for="request-time" class="block text-sm font-medium text-gray-700">Thời gian dự kiến đến:</label>
-                        <input type="time" id="request-time" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
-                    </div>
-                     <div class="mb-4">
-                        <label for="request-reason" class="block text-sm font-medium text-gray-700">Lý do đi trễ:</label>
-                        <textarea id="request-reason" required rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
-                    </div>`;
-                break;
-        }
-
-        modal.innerHTML = `
-            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
-                <h3 class="text-xl font-semibold mb-4">${title}</h3>
-                <form id="user-request-form">${formContent}
-                    <div class="flex justify-end space-x-3 mt-6">
-                        <button type="button" onclick="closeModal('user-request-modal')" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Hủy</button>
-                        <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">Gửi Yêu Cầu</button>
-                    </div>
-                </form>
-            </div>
-        `;
-        modal.classList.remove('hidden');
-        document.getElementById('user-request-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const newRequest = {
-                id: `req_${Date.now()}`,
-                employeeId: currentUserInfo.id,
-                employeeName: currentUserInfo.name,
-                status: 'pending',
-                type: document.getElementById('request-type').value,
-                date: document.getElementById('request-date').value,
-                reason: document.getElementById('request-reason').value,
-                details: {}
-            };
-            if(newRequest.type === 'edit') newRequest.details.newStatus = document.getElementById('request-status').value;
-            if(newRequest.type === 'late') newRequest.details.lateTime = document.getElementById('request-time').value;
-
-            requests.push(newRequest);
-            saveData('requests', requests);
-            render();
-            closeModal('user-request-modal');
-            alert('Đã gửi yêu cầu thành công!');
-        });
-    }
-    
-    // --- Re-render full implementation ---
-    // (This overrides the simplified one from the first script tag)
-    const originalRenderBody = window.renderBody; // Keep reference if needed
-    window.renderBody = function renderBody() {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const body = document.getElementById('timesheet-body');
-        let bodyHTML = '';
-
-        const pendingRequestsMap = new Map();
-        requests.filter(r => r.status === 'pending' && r.type === 'edit').forEach(r => {
-            const key = `${r.employeeId}-${new Date(r.date).getDate()}`;
-            pendingRequestsMap.set(key, true);
-        });
-
-        employees.forEach(emp => {
-            const empAttendance = attendanceData[emp.id] || {};
-            const summaries = Object.keys(STATUS_COUNT).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
-            for (let day = 1; day <= daysInMonth; day++) {
-                const status = empAttendance[day];
-                if (status) {
-                    for (const [summaryKey, config] of Object.entries(STATUS_COUNT)) {
-                        if (config.statuses[status]) summaries[summaryKey] += config.statuses[status];
-                    }
-                }
-            }
             
-            let rowHTML = `<td class="p-2 text-left font-medium">${emp.name}</td><td class="p-2 text-left text-gray-600">${emp.position}</td>`;
-            for (let day = 1; day <= daysInMonth; day++) {
-                const isWeekend = new Date(year, month, day).getDay() % 6 === 0;
-                const status = empAttendance[day] || '';
-                const statusInfo = STATUS_MAP[status] || {};
-                const hasPending = pendingRequestsMap.has(`${emp.id}-${day}`);
-                rowHTML += `<td data-employee-id="${emp.id}" data-day="${day}" class="p-2 cursor-pointer hover:bg-yellow-100 transition-colors ${isWeekend ? 'weekend' : ''} ${statusInfo.class || ''} ${hasPending ? 'pending-request' : ''}">${statusInfo.text || ''}</td>`;
-            }
-            Object.values(summaries).forEach(val => { rowHTML += `<td class="p-2 font-bold">${val || 0}</td>`; });
-            bodyHTML += `<tr>${rowHTML}</tr>`;
+            document.getElementById('admin-login-btn').addEventListener('click', openAdminLoginModal);
+            document.getElementById('admin-logout-btn').addEventListener('click', () => setCurrentUser(document.getElementById('user-select').value));
+            document.getElementById('admin-requests-btn').addEventListener('click', openAdminRequestsModal);
+            
+            document.getElementById('request-leave-btn').addEventListener('click', () => openUserRequestModal('leave', new Date().getDate()));
+            document.getElementById('request-late-btn').addEventListener('click', () => openUserRequestModal('late', new Date().getDate()));
+
+            document.getElementById('timesheet-body').addEventListener('click', (e) => {
+                const cell = e.target.closest('td');
+                if (!cell || !cell.dataset.employeeId) return;
+
+                const { employeeId, day } = cell.dataset;
+                const isAdmin = currentUserInfo.id === ADMIN_INFO.id;
+                const isSelf = employeeId === currentUserInfo.id;
+                const cellHasData = attendanceData[employeeId] && attendanceData[employeeId][day];
+
+                if (isAdmin) {
+                    const rect = cell.getBoundingClientRect();
+                    popover.classList.remove('hidden');
+                    popover.style.left = `${rect.left + window.scrollX}px`;
+                    popover.style.top = `${rect.bottom + window.scrollY + 5}px`;
+                    currentCell = { employeeId, day };
+                } else if (isSelf) {
+                    if (cellHasData) {
+                        openUserRequestModal('edit', day);
+                    } else {
+                         if(confirm(`Bạn muốn chấm công (X) cho ngày ${day}?`)){
+                            if(!attendanceData[employeeId]) attendanceData[employeeId] = {};
+                            attendanceData[employeeId][day] = 'X';
+                            saveData('attendanceData', attendanceData);
+                            render();
+                         }
+                    }
+                } else {
+                    alert('Bạn chỉ có thể thao tác trên dòng của mình.');
+                }
+            });
+            
+            document.getElementById('prev-month-btn').addEventListener('click', () => handleMonthChange(-1));
+            document.getElementById('next-month-btn').addEventListener('click', () => handleMonthChange(1));
+            document.getElementById('today-btn').addEventListener('click', () => { currentDate = new Date(); loadAllDataForMonth(); render(); });
+            document.getElementById('export-csv-btn').addEventListener('click', exportToCSV);
+            document.getElementById('user-select').addEventListener('change', (e) => setCurrentUser(e.target.value));
+            
+            popover.addEventListener('click', (e) => {
+                const button = e.target.closest('.status-btn');
+                if (button) {
+                    const { employeeId, day } = currentCell;
+                    if (employeeId && day) {
+                        const status = button.dataset.status;
+                        if (!attendanceData[employeeId]) attendanceData[employeeId] = {};
+                        if (status) attendanceData[employeeId][day] = status;
+                        else delete attendanceData[employeeId][day];
+                        saveData('attendanceData', attendanceData);
+                        render();
+                    }
+                    popover.classList.add('hidden');
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!popover.contains(e.target) && !e.target.closest('td[data-employee-id]')) {
+                     popover.classList.add('hidden');
+                }
+            });
         });
-        body.innerHTML = bodyHTML;
-    }
-    window.renderHeader = function renderHeader() {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const head = document.getElementById('timesheet-head');
-        let headerHTML = `<tr><th class="p-2 w-48 text-left">Họ và Tên</th><th class="p-2 w-36 text-left">Chức vụ</th>`;
-        for (let day = 1; day <= daysInMonth; day++) {
-            headerHTML += `<th class="p-2 text-center w-12">${day}</th>`;
-        }
-        Object.values(STATUS_COUNT).forEach(status => { headerHTML += `<th class="p-2 w-20">${status.label}</th>`; });
-        headerHTML += `</tr><tr><th></th><th></th>`;
-        const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dayOfWeek = new Date(year, month, day).getDay();
-            headerHTML += `<th class="p-2 text-xs font-normal ${dayOfWeek % 6 === 0 ? 'weekend' : ''}">${weekdays[dayOfWeek]}</th>`;
-        }
-        Object.values(STATUS_COUNT).forEach(() => { headerHTML += `<th></th>`; });
-        headerHTML += `</tr>`;
-        head.innerHTML = headerHTML;
-        document.getElementById('current-month-display').innerText = `Tháng ${month + 1}, ${year}`;
-    }
-
-
-    // --- EVENT LISTENERS ---
-    document.getElementById('admin-login-btn').addEventListener('click', openAdminLoginModal);
-    document.getElementById('admin-logout-btn').addEventListener('click', () => setCurrentUser(document.getElementById('user-select').value));
-    
-    document.getElementById('request-leave-btn').addEventListener('click', () => openUserRequestModal('leave'));
-    document.getElementById('request-late-btn').addEventListener('click', () => openUserRequestModal('late'));
-
-    document.getElementById('timesheet-body').addEventListener('click', (e) => {
-        const cell = e.target.closest('td');
-        if (!cell || !cell.dataset.employeeId) return;
-
-        const { employeeId, day } = cell.dataset;
-        const isAdmin = currentUserInfo.id === ADMIN_INFO.id;
-        const isSelf = employeeId === currentUserInfo.id;
-        const cellHasData = attendanceData[employeeId] && attendanceData[employeeId][day];
-
-        if (isAdmin) {
-            const rect = cell.getBoundingClientRect();
-            popover.classList.remove('hidden');
-            popover.style.left = `${rect.left + window.scrollX}px`;
-            popover.style.top = `${rect.bottom + window.scrollY + 5}px`;
-            currentCell = { employeeId, day };
-        } else if (isSelf) {
-            if (cellHasData) {
-                openUserRequestModal('edit', day);
-            } else {
-                 if(confirm(`Bạn muốn chấm công (X) cho ngày ${day}?`)){
-                    if(!attendanceData[employeeId]) attendanceData[employeeId] = {};
-                    attendanceData[employeeId][day] = 'X';
-                    saveData('attendanceData', attendanceData);
-                    render();
-                 }
-            }
-        } else {
-            alert('Bạn chỉ có thể thao tác trên dòng của mình.');
-        }
-    });
-    
-    // Other listeners from original file
-    document.getElementById('prev-month-btn').addEventListener('click', () => handleMonthChange(-1));
-    document.getElementById('next-month-btn').addEventListener('click', () => handleMonthChange(1));
-    document.getElementById('today-btn').addEventListener('click', () => { currentDate = new Date(); loadAllDataForMonth(); render(); });
-    document.getElementById('export-csv-btn').addEventListener('click', () => exportToCSV()); // Assuming exportToCSV exists
-    document.getElementById('user-select').addEventListener('change', (e) => setCurrentUser(e.target.value));
-    popover.addEventListener('click', (e) => {
-        const button = e.target.closest('.status-btn');
-        if (button) {
-            const { employeeId, day } = currentCell;
-            if (employeeId && day) {
-                const status = button.dataset.status;
-                if (!attendanceData[employeeId]) attendanceData[employeeId] = {};
-                if (status) attendanceData[employeeId][day] = status;
-                else delete attendanceData[employeeId][day];
-                saveData('attendanceData', attendanceData);
-                render();
-            }
-            popover.classList.add('hidden');
-        }
-    });
-    document.addEventListener('click', (e) => {
-        if (!popover.contains(e.target) && !e.target.closest('td[data-employee-id]')) {
-             popover.classList.add('hidden');
-        }
-    });
-
-});
-// Dummy functions for reference
-function exportToCSV() { alert("Chức năng xuất CSV đang được xây dựng."); }
-</script>
-
-
+    </script>
 </body>
 </html>
 
