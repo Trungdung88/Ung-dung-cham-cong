@@ -186,22 +186,10 @@
         import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, deleteDoc, setLogLevel, serverTimestamp, query, where, updateDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- CONFIG & STATE ---
-       // Nhập các hàm bạn cần từ SDK bạn cần
-nhập { initializeApp } từ "firebase/app" ;
-        // TODO: Thêm SDK cho các sản phẩm Firebase mà bạn muốn sử dụng
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Cấu hình Firebase của ứng dụng web của bạn
-const firebaseConfig = { 
-  apiKey : "AIzaSyAcc0iZFewP5ul2dVfjDuGioaj37GPiVZI" , 
-  authDomain : "cham-cong-dsg.firebaseapp.com" , 
-  projectId : "cham-cong-dsg" , 
-  storageBucket : "cham-cong-dsg.firebasestorage.app" , 
-  messagingSenderId : "45647463659" , 
-  appId : "1:45647463659:web:c99206405815b1f46c2aae" 
-};
-// Khởi tạo Firebase
-const app = initializeApp ( firebaseConfig );
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'cham-cong-default';
+        const ADMIN_NAME = 'Trần Nguyễn Trung Dũng';
+        const ADMIN_EMAIL = 'trungdungdsg@gmail.com';
         
         let app, auth, db;
         let isAuthReady = false;
@@ -508,10 +496,23 @@ const app = initializeApp ( firebaseConfig );
                     isAuthReady = true;
                     showApp();
                 } catch (error) {
-                    if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                        loginError.textContent = 'Mật khẩu không đúng.';
-                    } else {
-                        loginError.textContent = 'Lỗi xác thực. Vui lòng thử lại.';
+                    console.error("Lỗi Đăng Nhập Firebase:", error); // Log the full error object
+                    
+                    // Provide more specific feedback to the user
+                    switch (error.code) {
+                        case 'auth/user-not-found':
+                        case 'auth/invalid-email':
+                            loginError.textContent = 'Email không tồn tại trong hệ thống.';
+                            break;
+                        case 'auth/wrong-password':
+                        case 'auth/invalid-credential':
+                            loginError.textContent = 'Mật khẩu không đúng. Vui lòng kiểm tra lại.';
+                            break;
+                        case 'auth/too-many-requests':
+                             loginError.textContent = 'Quá nhiều lần thử sai. Vui lòng thử lại sau.';
+                             break;
+                        default:
+                            loginError.textContent = 'Lỗi xác thực. Vui lòng kiểm tra console (F12) để biết chi tiết.';
                     }
                 }
             } 
