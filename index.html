@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ứng Dụng Chấm Công</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        th, td {
+            border: 1px solid #e2e8f0;
+            white-space: nowrap;
+            text-align: center;
+        }
+        th:first-child, td:first-child,
+        th:nth-child(2), td:nth-child(2) {
+            position: sticky;
+            left: 0;
+            z-index: 10;
+            background-color: white;
+        }
+        th:first-child, td:first-child {
+            width: 200px;
+            min-width: 200px;
+        }
+        th:nth-child(2), td:nth-child(2) {
+            left: 200px;
+            width: 150px;
+            min-width: 150px;
+        }
+        .weekend {
+            background-color: #f7fafc;
+        }
+        .status-popover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Styling for pending requests */
+        td.pending-request {
+            position: relative;
+        }
+        td.pending-request::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            background-color: #f59e0b; /* amber-500 */
+            border-radius: 50%;
+            border: 1px solid white;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="fixed inset-0 bg-gray-100 flex items-center justify-center z-50">
+        <div class="w-full max-w-sm p-8 bg-white rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-2">Đăng Nhập</h2>
+            <p class="text-center text-gray-500 mb-6">Ứng dụng Chấm công</p>
+            <form id="login-form">
+                 <div class="mb-4">
+                    <label for="name-select" class="block text-sm font-medium text-gray-700">Chọn tên của bạn</label>
+                    <select id="name-select" required class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="" disabled selected>-- Vui lòng chọn --</option>
+                        <!-- Names will be populated here by JS -->
+                    </select>
+                </div>
+
+                <div id="admin-login-fields" class="hidden space-y-4 transition-all duration-300">
+                     <div class="mb-4">
+                        <label for="email" class="block text-sm font-medium text-gray-700">Email xác nhận</label>
+                        <input type="email" id="email" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div class="mb-6">
+                        <label for="password" class="block text-sm font-medium text-gray-700">Mật khẩu</label>
+                        <input type="password" id="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-150 mt-6">Đăng Nhập</button>
+                <p id="login-error" class="text-red-500 text-sm mt-4 text-center"></p>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Main App Content (hidden by default) -->
+    <div id="app" class="p-4 sm:p-6 lg:p-8 hidden">
+        <!-- Header -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Bảng Chấm Công Điện Tử</h1>
+                <p class="text-sm text-gray-500" id="welcome-message">Trường Trung Cấp Đông Sài Gòn</p>
+            </div>
+            <div id="user-actions" class="flex items-center space-x-2 mt-4 sm:mt-0">
+                <button id="export-csv-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition duration-150">
+                    Xuất File
+                </button>
+                <button id="requests-btn" data-modal-target="requests-modal" class="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-yellow-600 transition duration-150">
+                    Yêu Cầu
+                </button>
+                <button id="manage-employees-btn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-150">
+                    Nhân viên
+                </button>
+                 <button id="logout-btn" class="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-red-700 transition duration-150">
+                    Đăng xuất
+                </button>
+            </div>
+        </div>
+
+        <!-- Month Navigator -->
+        <div class="flex items-center justify-center space-x-4 bg-white p-3 rounded-lg shadow-sm mb-6">
+            <button id="prev-month-btn" class="p-2 rounded-md hover:bg-gray-100">&lt; Tháng Trước</button>
+            <h2 id="current-month-display" class="text-xl font-bold w-48 text-center"></h2>
+            <button id="next-month-btn" class="p-2 rounded-md hover:bg-gray-100">Tháng Sau &gt;</button>
+            <button id="today-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition duration-150">Hôm Nay</button>
+        </div>
+
+        <!-- Timesheet Table -->
+        <div id="loader" class="flex justify-center items-center h-64">
+             <div class="loader"></div>
+             <p class="ml-4 text-gray-600">Đang tải dữ liệu...</p>
+        </div>
+        <div id="timesheet-container" class="table-container bg-white rounded-lg shadow-sm hidden">
+            <table class="w-full text-sm">
+                <thead id="timesheet-head" class="bg-gray-100 text-gray-600 uppercase">
+                </thead>
+                <tbody id="timesheet-body">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Status Update Popover (Admin only) -->
+    <div id="status-popover" class="status-popover hidden absolute bg-white border border-gray-200 rounded-lg p-2 z-20">
+        <!-- Content same as before -->
+         <div class="grid grid-cols-4 gap-2">
+            <button data-status="X" class="status-btn font-bold text-green-600 bg-green-100 hover:bg-green-200 rounded p-2 text-sm">X</button>
+            <button data-status="X/2" class="status-btn font-bold text-teal-600 bg-teal-100 hover:bg-teal-200 rounded p-2 text-sm">X/2</button>
+            <button data-status="P" class="status-btn font-bold text-blue-600 bg-blue-100 hover:bg-blue-200 rounded p-2 text-sm">P</button>
+            <button data-status="VR" class="status-btn font-bold text-indigo-600 bg-indigo-100 hover:bg-indigo-200 rounded p-2 text-sm">VR</button>
+            <button data-status="No" class="status-btn font-bold text-orange-600 bg-orange-100 hover:bg-orange-200 rounded p-2 text-sm">No</button>
+            <button data-status="Nb" class="status-btn font-bold text-cyan-600 bg-cyan-100 hover:bg-cyan-200 rounded p-2 text-sm">Nb</button>
+            <button data-status="L" class="status-btn font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 rounded p-2 text-sm">L</button>
+            <button data-status="Ô" class="status-btn font-bold text-amber-600 bg-amber-100 hover:bg-amber-200 rounded p-2 text-sm">Ô</button>
+            <button data-status="Ts" class="status-btn font-bold text-pink-600 bg-pink-100 hover:bg-pink-200 rounded p-2 text-sm">Ts</button>
+            <button data-status="H" class="status-btn font-bold text-gray-600 bg-gray-200 hover:bg-gray-300 rounded p-2 text-sm">H</button>
+            <button data-status="Cđ" class="status-btn font-bold text-lime-600 bg-lime-100 hover:bg-lime-200 rounded p-2 text-sm">Cđ</button>
+            <button data-status="" class="status-btn font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 rounded p-2 text-xs">Xóa</button>
+        </div>
+    </div>
+
+    <!-- Modals (Placeholder) -->
+    <div id="employee-modal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-30 hidden"></div>
+    <div id="requests-modal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-30 hidden"></div>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, deleteDoc, setLogLevel, serverTimestamp, query, where, updateDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- CONFIG & STATE ---
+       // Nhập các hàm bạn cần từ SDK bạn cần
+nhập { initializeApp } từ "firebase/app" ;
+        // TODO: Thêm SDK cho các sản phẩm Firebase mà bạn muốn sử dụng
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Cấu hình Firebase của ứng dụng web của bạn
+const firebaseConfig = { 
+  apiKey : "AIzaSyAcc0iZFewP5ul2dVfjDuGioaj37GPiVZI" , 
+  authDomain : "cham-cong-dsg.firebaseapp.com" , 
+  projectId : "cham-cong-dsg" , 
+  storageBucket : "cham-cong-dsg.firebasestorage.app" , 
+  messagingSenderId : "45647463659" , 
+  appId : "1:45647463659:web:c99206405815b1f46c2aae" 
+};
+// Khởi tạo Firebase
+const app = initializeApp ( firebaseConfig );
+        
+        let app, auth, db;
+        let isAuthReady = false;
+
+        let currentUserInfo = { id: null, name: null, email: null, isAdmin: false };
+        let currentDate = new Date(2025, 0, 1);
+        let employees = [];
+        let loginableEmployees = []; // For login screen
+        let attendanceData = {};
+        let allRequests = [];
+        
+        let unsubscribeEmployees, unsubscribeTimesheet, unsubscribeRequests;
+        
+        const popover = document.getElementById('status-popover');
+        let currentCell = { employeeId: null, day: null };
+
+        // --- STATUS CONFIG (same as before) ---
+        const STATUS_MAP = { "X": { text: "X", class: "bg-green-100 text-green-800 font-semibold" }, "X/2": { text: "X/2", class: "bg-teal-100 text-teal-800 font-semibold" }, "P": { text: "P", class: "bg-blue-100 text-blue-800 font-semibold" }, "VR": { text: "VR", class: "bg-indigo-100 text-indigo-800 font-semibold" }, "L": { text: "L", class: "bg-purple-100 text-purple-800 font-semibold" }, "Ô": { text: "Ô", class: "bg-amber-100 text-amber-800 font-semibold" }, "Ts": { text: "Ts", class: "bg-pink-100 text-pink-800 font-semibold" }, "Nb": { text: "Nb", class: "bg-cyan-100 text-cyan-800 font-semibold" }, "No": { text: "No", class: "bg-orange-100 text-orange-800 font-semibold" }, "H": { text: "H", class: "bg-gray-200 text-gray-700 font-semibold" }, "Cđ": { text: "Cđ", class: "bg-lime-100 text-lime-800 font-semibold" }, };
+        const STATUS_COUNT = { workDays: { label: 'Công', statuses: {'X': 1, 'X/2': 0.5, 'H': 1, 'Cđ': 1} }, paidLeave: { label: 'Nghỉ P', statuses: {'P': 1} }, unpaidLeave: { label: 'Nghỉ KL', statuses: {'No': 1, 'VR': 1} }, insuranceLeave: { label: 'Nghỉ BHXH', statuses: {'Ô': 1, 'Ts': 1} }, holiday: { label: 'Lễ', statuses: {'L': 1} }, compensatedLeave: { label: 'Nghỉ Bù', statuses: {'Nb': 1} }, };
+
+        // --- FIREBASE & AUTH ---
+        async function initializeFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                setLogLevel('debug');
+
+                onAuthStateChanged(auth, (user) => {
+                    // This listener now ONLY handles the state of the ADMIN user from Firebase Auth
+                    if (user && user.email === ADMIN_EMAIL) {
+                        // Admin successfully logged in via Firebase.
+                        console.log("Admin auth state confirmed:", user.email);
+                    } else {
+                        // Any other state (no user, wrong user, etc.) means we show the login screen.
+                        if (isAuthReady) { // If user was logged in and now is not
+                            resetToLoginScreen();
+                        }
+                        setupLoginScreen();
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                document.getElementById('login-error').textContent = 'Lỗi kết nối với hệ thống.';
+            }
+        }
+
+        async function setupLoginScreen() {
+            const nameSelect = document.getElementById('name-select');
+            nameSelect.innerHTML = '<option value="" disabled selected>-- Đang tải danh sách --</option>';
+            try {
+                const employeesSnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/employees`));
+                loginableEmployees = employeesSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
+                loginableEmployees.sort((a,b) => (a.sortOrder || 999) - (b.sortOrder || 999));
+                
+                nameSelect.innerHTML = '<option value="" disabled selected>-- Vui lòng chọn --</option>';
+                loginableEmployees.forEach(emp => {
+                    const option = document.createElement('option');
+                    option.value = emp.id;
+                    option.textContent = emp.name;
+                    nameSelect.appendChild(option);
+                });
+
+            } catch(e) {
+                console.error("Could not fetch employees for login:", e);
+                nameSelect.innerHTML = '<option value="" disabled selected>-- Lỗi tải danh sách --</option>';
+            }
+        }
+        
+        function resetToLoginScreen() {
+             currentUserInfo = { id: null, name: null, email: null, isAdmin: false };
+            isAuthReady = false;
+            
+            if (unsubscribeEmployees) unsubscribeEmployees();
+            if (unsubscribeTimesheet) unsubscribeTimesheet();
+            if (unsubscribeRequests) unsubscribeRequests();
+
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('app').classList.add('hidden');
+            document.getElementById('admin-login-fields').classList.add('hidden');
+            document.getElementById('login-form').reset();
+        }
+
+        // --- DATA FETCH ---
+        function fetchAllData() {
+            if (!isAuthReady) return;
+            subscribeToEmployees();
+            subscribeToTimesheet();
+            subscribeToRequests();
+        }
+        
+        async function addInitialData() {
+            console.log("Database is empty. Seeding initial employee data...");
+            const initialEmployees = [
+                { name: 'Trần Huyền Vân', position: 'Phó Hiệu Trưởng', sortOrder: 1, email: 'huyen.van@example.com' },
+                { name: 'Trần Nguyễn Trung Dũng', position: 'TP. Đào tạo', sortOrder: 2, email: 'trungdungdsg@gmail.com' },
+                { name: 'Đoàn Hồng Hải Vân', position: 'VC. P. Đào tạo', sortOrder: 3, email: 'hai.van@example.com' },
+                { name: 'Nguyễn Thùy Dung', position: 'VC. P. Đào tạo', sortOrder: 4, email: 'thuy.dung@example.com' },
+                { name: 'Võ Hoàng Thanh', position: 'VC. P. Đào tạo', sortOrder: 5, email: 'hoang.thanh@example.com' },
+            ];
+            
+            const batch = writeBatch(db);
+            initialEmployees.forEach(emp => {
+                const newDocRef = doc(collection(db, `artifacts/${appId}/public/data/employees`));
+                batch.set(newDocRef, emp);
+            });
+            
+            try {
+                await batch.commit();
+                console.log("Initial employee data has been successfully added.");
+                await setupLoginScreen();
+            } catch (error) {
+                console.error("Error seeding initial data:", error);
+            }
+        }
+
+        function subscribeToEmployees() { 
+            if (unsubscribeEmployees) unsubscribeEmployees();
+            const employeesColRef = collection(db, `artifacts/${appId}/public/data/employees`);
+            unsubscribeEmployees = onSnapshot(employeesColRef, (snapshot) => {
+                if (snapshot.empty && currentUserInfo.isAdmin) {
+                    addInitialData();
+                    return; 
+                }
+
+                employees = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                employees.sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999) || a.name.localeCompare(b.name, 'vi'));
+                render();
+            });
+        }
+        function subscribeToTimesheet() {
+            if (unsubscribeTimesheet) unsubscribeTimesheet();
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const timesheetId = `${year}-${String(month).padStart(2, '0')}`;
+            const timesheetDocRef = doc(db, `artifacts/${appId}/public/data/timesheets`, timesheetId);
+            unsubscribeTimesheet = onSnapshot(timesheetDocRef, (doc) => {
+                attendanceData = doc.exists() ? doc.data().records || {} : {};
+                render();
+            });
+        }
+        function subscribeToRequests() {
+            if (unsubscribeRequests) unsubscribeRequests();
+            const requestsColRef = collection(db, `artifacts/${appId}/public/data/requests`);
+            let q = query(requestsColRef);
+            if (!currentUserInfo.isAdmin && currentUserInfo.id) {
+                q = query(requestsColRef, where("employeeId", "==", currentUserInfo.id));
+            }
+            unsubscribeRequests = onSnapshot(q, (snapshot) => {
+                allRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                render();
+            });
+        }
+
+        // --- UI & ROLE MANAGEMENT ---
+        function updateUIForRole() {
+            const welcomeMsg = document.getElementById('welcome-message');
+            const requestsBtn = document.getElementById('requests-btn');
+            const manageEmployeesBtn = document.getElementById('manage-employees-btn');
+            
+            welcomeMsg.textContent = `Xin chào, ${currentUserInfo.name}`;
+            
+            if (currentUserInfo.isAdmin) {
+                requestsBtn.textContent = 'Duyệt Yêu Cầu';
+                manageEmployeesBtn.classList.remove('hidden');
+            } else {
+                requestsBtn.textContent = 'Tạo Yêu Cầu';
+                manageEmployeesBtn.classList.add('hidden');
+            }
+        }
+        
+        function showApp() {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            document.getElementById('loader').classList.remove('hidden');
+            document.getElementById('timesheet-container').classList.add('hidden');
+            updateUIForRole();
+            fetchAllData();
+        }
+
+        // --- RENDERING ---
+        function render() {
+            if (!isAuthReady) return;
+            document.getElementById('loader').classList.add('hidden');
+            document.getElementById('timesheet-container').classList.remove('hidden');
+            renderHeader();
+            renderBody();
+        }
+        function renderHeader() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const head = document.getElementById('timesheet-head');
+            let headerHTML = `<tr><th class="p-2 w-48 text-left">Họ và Tên</th><th class="p-2 w-36 text-left">Chức vụ</th>`;
+            for (let day = 1; day <= daysInMonth; day++) {
+                const isWeekend = new Date(year, month, day).getDay() % 6 === 0;
+                headerHTML += `<th class="p-2 text-center w-12 ${isWeekend ? 'weekend' : ''}">${day}</th>`;
+            }
+            Object.values(STATUS_COUNT).forEach(status => { headerHTML += `<th class="p-2 w-20">${status.label}</th>`; });
+            headerHTML += `</tr><tr><th></th><th></th>`;
+            const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayOfWeek = new Date(year, month, day).getDay();
+                headerHTML += `<th class="p-2 text-xs font-normal ${dayOfWeek % 6 === 0 ? 'weekend' : ''}">${weekdays[dayOfWeek]}</th>`;
+            }
+            Object.values(STATUS_COUNT).forEach(() => { headerHTML += `<th></th>`; });
+            headerHTML += `</tr>`;
+            head.innerHTML = headerHTML;
+            document.getElementById('current-month-display').innerText = `Tháng ${month + 1}, ${year}`;
+        }
+        function renderBody() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const body = document.getElementById('timesheet-body');
+            let bodyHTML = '';
+            
+            const pendingRequestsMap = new Map();
+            allRequests.filter(r => r.status === 'pending').forEach(r => {
+                const requestDate = new Date(r.date.seconds * 1000);
+                if (requestDate.getFullYear() === year && requestDate.getMonth() === month) {
+                    const key = `${r.employeeId}-${requestDate.getDate()}`;
+                    pendingRequestsMap.set(key, true);
+                }
+            });
+
+            employees.forEach(emp => {
+                const empAttendance = attendanceData[emp.id] || {};
+                const summaries = Object.keys(STATUS_COUNT).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
+                for (let day = 1; day <= 31; day++) {
+                    const status = empAttendance[day];
+                    if (status) {
+                        for (const [summaryKey, config] of Object.entries(STATUS_COUNT)) {
+                            if (config.statuses[status]) summaries[summaryKey] += config.statuses[status];
+                        }
+                    }
+                }
+                
+                bodyHTML += `<tr><td class="p-2 text-left font-medium">${emp.name}</td><td class="p-2 text-left text-gray-600">${emp.position}</td>`;
+                for (let day = 1; day <= new Date(year, month + 1, 0).getDate(); day++) {
+                    const isWeekend = new Date(year, month, day).getDay() % 6 === 0;
+                    const status = empAttendance[day] || '';
+                    const statusInfo = STATUS_MAP[status] || { text: '', class: '' };
+                    const hasPending = pendingRequestsMap.has(`${emp.id}-${day}`);
+                    bodyHTML += `<td data-employee-id="${emp.id}" data-day="${day}" class="p-2 cursor-pointer hover:bg-yellow-100 transition-colors ${isWeekend ? 'weekend' : ''} ${statusInfo.class} ${hasPending ? 'pending-request' : ''}">${statusInfo.text}</td>`;
+                }
+                Object.values(summaries).forEach(val => { bodyHTML += `<td class="p-2 font-bold">${val || 0}</td>`; });
+                bodyHTML += `</tr>`;
+            });
+            body.innerHTML = bodyHTML;
+        }
+
+        // --- ACTIONS ---
+        function handleMonthChange(offset) { currentDate.setMonth(currentDate.getMonth() + offset); subscribeToTimesheet(); }
+        async function updateAttendance(employeeId, day, status) {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const timesheetId = `${year}-${String(month).padStart(2, '0')}`;
+            const timesheetDocRef = doc(db, `artifacts/${appId}/public/data/timesheets`, timesheetId);
+            try {
+                await setDoc(timesheetDocRef, { records: { [employeeId]: { [day]: status } } }, { merge: true });
+            } catch (error) { console.error("Error updating attendance:", error); }
+        }
+        
+        // --- EVENT LISTENERS ---
+        document.getElementById('name-select').addEventListener('change', (e) => {
+            const selectedId = e.target.value;
+            const selectedEmployee = loginableEmployees.find(emp => emp.id === selectedId);
+            const adminFields = document.getElementById('admin-login-fields');
+            if (selectedEmployee && selectedEmployee.name === ADMIN_NAME) {
+                adminFields.classList.remove('hidden');
+                document.getElementById('email').required = true;
+                document.getElementById('password').required = true;
+
+            } else {
+                adminFields.classList.add('hidden');
+                document.getElementById('email').required = false;
+                document.getElementById('password').required = false;
+            }
+        });
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const loginError = document.getElementById('login-error');
+            loginError.textContent = '';
+            const selectedId = document.getElementById('name-select').value;
+            if (!selectedId) {
+                loginError.textContent = 'Vui lòng chọn tên của bạn.';
+                return;
+            }
+
+            const selectedEmployee = loginableEmployees.find(emp => emp.id === selectedId);
+
+            // Handle Admin Login
+            if (selectedEmployee.name === ADMIN_NAME) {
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                if(email !== ADMIN_EMAIL) {
+                    loginError.textContent = 'Email xác nhận không đúng.';
+                    return;
+                }
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    currentUserInfo = { ...selectedEmployee, isAdmin: true };
+                    isAuthReady = true;
+                    showApp();
+                } catch (error) {
+                    if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                        loginError.textContent = 'Mật khẩu không đúng.';
+                    } else {
+                        loginError.textContent = 'Lỗi xác thực. Vui lòng thử lại.';
+                    }
+                }
+            } 
+            // Handle User Login
+            else {
+                currentUserInfo = { ...selectedEmployee, isAdmin: false };
+                isAuthReady = true;
+                showApp();
+            }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            if(currentUserInfo.isAdmin) {
+                 await signOut(auth);
+            } else {
+                resetToLoginScreen();
+            }
+        });
+        
+        document.getElementById('prev-month-btn').addEventListener('click', () => handleMonthChange(-1));
+        document.getElementById('next-month-btn').addEventListener('click', () => handleMonthChange(1));
+        document.getElementById('today-btn').addEventListener('click', () => { currentDate = new Date(); subscribeToTimesheet(); });
+        document.getElementById('export-csv-btn').addEventListener('click', () => { alert('Chức năng xuất file sẽ được bổ sung.'); });
+
+        document.getElementById('timesheet-body').addEventListener('click', (e) => {
+            const cell = e.target.closest('td');
+            if (!cell || !cell.dataset.employeeId) return;
+            const { employeeId, day } = cell.dataset;
+
+            if (currentUserInfo.isAdmin) {
+                const rect = cell.getBoundingClientRect();
+                popover.classList.remove('hidden');
+                popover.style.left = `${rect.left + window.scrollX}px`;
+                popover.style.top = `${rect.bottom + window.scrollY + 5}px`;
+                currentCell = { employeeId, day };
+            } else {
+                if(employeeId === currentUserInfo.id) {
+                     alert(`Mở form yêu cầu chỉnh sửa cho ngày ${day}`);
+                } else {
+                     alert("Bạn chỉ có thể thao tác trên bảng chấm công của chính mình.");
+                }
+            }
+        });
+
+        popover.addEventListener('click', (e) => {
+            const button = e.target.closest('.status-btn');
+            if (button) {
+                const { employeeId, day } = currentCell;
+                if (employeeId && day) {
+                    updateAttendance(employeeId, day, button.dataset.status);
+                }
+                popover.classList.add('hidden');
+            }
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (!popover.contains(e.target) && !e.target.closest('td[data-employee-id]')) {
+                 popover.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('requests-btn').addEventListener('click', () => {
+            if (currentUserInfo.isAdmin) { alert('Mở modal duyệt yêu cầu cho Admin'); } 
+            else { alert('Mở modal tạo yêu cầu cho User'); }
+        });
+        document.getElementById('manage-employees-btn').addEventListener('click', () => {
+             if (currentUserInfo.isAdmin) { alert('Mở modal quản lý nhân viên'); }
+        });
+
+        // --- STARTUP ---
+        initializeFirebase();
+    </script>
+</body>
+</html>
+
