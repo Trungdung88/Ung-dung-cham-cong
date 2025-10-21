@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ứng Dụng Chấm Công (Lưu Dữ Liệu Cục Bộ)</title>
+    <title>Ứng Dụng Chấm Công (Lưu và Xuất File)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -57,7 +57,7 @@
         <!-- Warning Banner -->
         <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6 rounded-md" role="alert">
             <p class="font-bold">Lưu ý</p>
-            <p>Dữ liệu chấm công đang được lưu trực tiếp trên trình duyệt này. Dữ liệu sẽ không được đồng bộ với các máy tính khác.</p>
+            <p>Dữ liệu chấm công đang được lưu trực tiếp trên trình duyệt này. Nhấn "Xuất File" để lưu trữ lâu dài.</p>
         </div>
 
         <!-- Header -->
@@ -166,7 +166,7 @@
             } else {
                 delete attendanceData[employeeId][day];
             }
-            saveAttendanceToStorage(); // Save data on every update
+            saveAttendanceToStorage();
             render(); 
         }
 
@@ -190,7 +190,6 @@
                     isAdmin: selectedEmployee.name === ADMIN_NAME
                 };
             }
-             console.log("Current user set to:", currentUserInfo);
         }
 
         // --- RENDERING ---
@@ -257,7 +256,7 @@
         // --- ACTION HANDLERS ---
         function handleMonthChange(offset) {
             currentDate.setMonth(currentDate.getMonth() + offset);
-            loadAttendanceFromStorage(); // Load data for the new month
+            loadAttendanceFromStorage();
             render();
         }
         
@@ -267,11 +266,55 @@
             render();
         }
 
+        function exportToCSV() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // \uFEFF for UTF-8 BOM
+
+            // Header Row 1: Employee Info and Day Numbers
+            let header1 = ["STT", "Họ và Tên", "Chức vụ"];
+            for (let day = 1; day <= daysInMonth; day++) {
+                header1.push(day);
+            }
+            Object.values(STATUS_COUNT).forEach(status => header1.push(status.label));
+            csvContent += header1.join(',') + '\r\n';
+
+            // Data Rows
+            employees.forEach((emp, index) => {
+                let row = [index + 1, `"${emp.name}"`, `"${emp.position}"`];
+                const empAttendance = attendanceData[emp.id] || {};
+                const summaries = Object.keys(STATUS_COUNT).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
+
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const status = empAttendance[day] || '';
+                    row.push(status);
+                    if (status) {
+                        for (const [summaryKey, config] of Object.entries(STATUS_COUNT)) {
+                            if (config.statuses[status]) summaries[summaryKey] += config.statuses[status];
+                        }
+                    }
+                }
+                Object.values(summaries).forEach(val => row.push(val || 0));
+                csvContent += row.join(',') + '\r\n';
+            });
+
+            // Trigger Download
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `Bang_Cham_Cong_Thang_${month + 1}_${year}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
         // --- EVENT LISTENERS ---
         document.getElementById('prev-month-btn').addEventListener('click', () => handleMonthChange(-1));
         document.getElementById('next-month-btn').addEventListener('click', () => handleMonthChange(1));
         document.getElementById('today-btn').addEventListener('click', handleToday);
-        document.getElementById('export-csv-btn').addEventListener('click', () => { alert('Chức năng xuất file sẽ được bổ sung.'); });
+        document.getElementById('export-csv-btn').addEventListener('click', exportToCSV);
 
         document.getElementById('user-select').addEventListener('change', (e) => {
             setCurrentUser(e.target.value);
@@ -316,7 +359,6 @@
             loadInitialData();
             loadAttendanceFromStorage();
             populateUserDropdown();
-            // Set the initial user to the first one in the list
             if (employees.length > 0) {
                 setCurrentUser(employees[0].id);
                 document.getElementById('user-select').value = employees[0].id;
